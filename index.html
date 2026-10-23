@@ -1,0 +1,282 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body style="margin:0"><title>Pile Sorter</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: one working stage (photo + boxes) beside a tally rack of five bins; the bins are the page's color system. */
+:root{
+  --bg:#EBEFEC; --surface:#F7F9F7; --ink:#0F1F19; --muted:#56675E; --line:#D2DAD5; --accent:#0F6B4B; --accent-ink:#FFFFFF; --stage:#DCE3DE;
+  --c-plastic:#2F7DE1; --c-metal:#F26B3A; --c-paper:#E3B01A; --c-organic:#38A55A; --c-other:#9B63DF;
+  --f-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --f-body:'Instrument Sans','Segoe UI',system-ui,sans-serif;
+  --f-mono:'DM Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B1411; --surface:#131E1A; --ink:#E5EEE9; --muted:#8CA095; --line:#24332D; --accent:#4FD1A0; --accent-ink:#06150F; --stage:#0E1815; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0B1411; --surface:#131E1A; --ink:#E5EEE9; --muted:#8CA095; --line:#24332D; --accent:#4FD1A0; --accent-ink:#06150F; --stage:#0E1815; color-scheme:dark;}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:800;font-size:1.25rem;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.brand i{display:inline-grid;grid-template-columns:repeat(5,5px);gap:2px;height:18px;align-items:end}
+.brand i b{display:block;border-radius:1px}
+.brand i b:nth-child(1){background:var(--c-plastic);height:100%}.brand i b:nth-child(2){background:var(--c-metal);height:70%}
+.brand i b:nth-child(3){background:var(--c-paper);height:85%}.brand i b:nth-child(4){background:var(--c-organic);height:55%}.brand i b:nth-child(5){background:var(--c-other);height:40%}
+.pill{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px;display:inline-flex;align-items:center;gap:8px;background:var(--surface)}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.pill[data-s="ready"]::before{background:var(--c-organic)}.pill[data-s="busy"]::before{background:var(--c-paper)}.pill[data-s="err"]::before{background:var(--c-metal)}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2rem,5.5vw,3.6rem);line-height:1;letter-spacing:-.035em;margin:0;text-wrap:balance;max-width:16ch}
+.lede{color:var(--muted);max-width:52ch;margin:10px 0 0;font-size:1.02rem}
+.hero{display:flex;flex-direction:column}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+.stage-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.stage{position:relative;background:var(--stage);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-height:260px;display:grid;place-items:center}
+.stage.drag{outline:2px dashed var(--accent);outline-offset:-8px}
+canvas{display:block;width:100%;height:auto;max-width:100%}
+.empty{padding:28px 20px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.empty svg{width:min(360px,80%);height:auto}
+.empty p{margin:0;color:var(--muted);max-width:36ch}
+.empty strong{color:var(--ink);font-weight:600}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:600 .92rem var(--f-body);border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:focus-visible,.bin:focus-visible,input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.sens{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:.85rem;color:var(--muted)}
+.sens output{font-family:var(--f-mono);color:var(--ink);min-width:3ch;text-align:right}
+input[type=range]{accent-color:var(--accent);width:150px}
+.readout{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);min-height:1.4em}
+
+.rack{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.rack-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.rack-head h2{font-family:var(--f-display);font-size:1rem;font-weight:700;margin:0;letter-spacing:-.01em}
+.total{font-family:var(--f-display);font-weight:800;font-size:2.6rem;line-height:.9;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.total small{font:500 .75rem var(--f-mono);color:var(--muted);letter-spacing:0;margin-left:6px}
+.bins{display:flex;flex-direction:column;gap:6px}
+.bin{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:10px 1fr auto;gap:2px 12px;align-items:center;padding:10px 10px;border-radius:10px;border:1px solid transparent}
+.bin:hover,.bin[aria-pressed="true"]{background:var(--bg);border-color:var(--line)}
+.bin .sw{width:10px;height:100%;min-height:40px;border-radius:3px;grid-column:1;grid-row:1/4}
+.bin .nm{font-weight:600;text-transform:capitalize;grid-column:2;grid-row:1}
+.bin .ct{font-family:var(--f-mono);font-size:1.25rem;font-variant-numeric:tabular-nums;grid-column:3;grid-row:1/3;text-align:right;align-self:center}
+.bin .bar{grid-column:2;grid-row:2;height:4px;border-radius:2px;background:var(--line);overflow:hidden;grid-column:2}
+.bin .bar b{display:block;height:100%;width:0;border-radius:2px;transition:width .25s ease}
+.bin .hint{grid-column:2;grid-row:3;font-size:.72rem;color:var(--muted);margin-top:-2px}
+.note{font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;margin:0}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px 24px;border-top:1px solid var(--line);padding-top:18px}
+.facts div{display:flex;flex-direction:column;gap:2px}
+.facts dt{font:500 .72rem var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.facts dd{margin:0;font-weight:500}
+.facts{margin:0}
+
+@media (max-width:860px){.main{grid-template-columns:minmax(0,1fr)}.sens{margin-left:0;width:100%}input[type=range]{flex:1}}
+@media (prefers-reduced-motion:reduce){.bin .bar b{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b></i>Pile Sorter</div>
+    <span class="pill" id="status" data-s="busy" role="status">Loading model</span>
+  </header>
+
+  <section class="hero">
+    <h1>Point it at a pile. See what goes where.</h1>
+    <p class="lede">Add a photo of mixed waste. The detector boxes each item and tallies it into plastic, metal, paper, organic or other. It runs on your device and nothing is uploaded.</p>
+  </section>
+
+  <section class="main">
+    <div class="stage-col">
+      <div class="stage" id="stage">
+        <canvas id="cv" hidden></canvas>
+        <div class="empty" id="empty">
+          <svg viewBox="0 0 360 200" role="img" aria-label="Illustration of boxes drawn around mixed items">
+            <g fill="none" stroke-width="3" stroke-linejoin="round">
+              <rect x="22" y="50" width="86" height="110" rx="4" stroke="var(--c-plastic)"/>
+              <rect x="124" y="84" width="70" height="76" rx="4" stroke="var(--c-metal)"/>
+              <rect x="208" y="40" width="64" height="100" rx="4" stroke="var(--c-paper)"/>
+              <rect x="284" y="100" width="58" height="60" rx="4" stroke="var(--c-organic)"/>
+            </g>
+            <g fill="var(--muted)" opacity=".35">
+              <rect x="40" y="66" width="50" height="78" rx="14"/><circle cx="159" cy="122" r="26"/>
+              <rect x="222" y="56" width="36" height="68" rx="3"/><ellipse cx="313" cy="132" rx="22" ry="18"/>
+            </g>
+            <g font-family="DM Mono, monospace" font-size="11" fill="var(--ink)">
+              <text x="22" y="44">plastic</text><text x="124" y="78">metal</text><text x="208" y="34">paper</text><text x="284" y="94">organic</text>
+            </g>
+          </svg>
+          <p><strong>Drop a photo here</strong>, paste one, or use the buttons below. Piles shot from above work best.</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <label class="btn primary" for="photo">Add photo</label>
+        <input id="photo" type="file" accept="image/*" hidden>
+        <button class="btn" id="camBtn" type="button">Use camera</button>
+        <div class="sens"><label for="conf">Sensitivity</label><input id="conf" type="range" min="0.10" max="0.80" step="0.05" value="0.25"><output id="confOut" for="conf">0.25</output></div>
+      </div>
+      <div class="readout" id="readout"></div>
+    </div>
+
+    <aside class="rack" aria-label="Sorted counts">
+      <div class="rack-head"><h2>Sorted into bins</h2></div>
+      <div class="total"><span id="total">0</span><small>items found</small></div>
+      <div class="bins" id="bins"></div>
+      <p class="note">Select a bin to show only its boxes. Lower the sensitivity to catch more items, raise it to cut false alarms.</p>
+    </aside>
+  </section>
+
+  <dl class="facts">
+    <div><dt>Model</dt><dd>YOLO26 nano, 640 px</dd></div>
+    <div><dt>Size</dt><dd>9.4 MB, runs in the browser</dd></div>
+    <div><dt>Training data</dt><dd>TACO litter photos plus organic waste set</dd></div>
+    <div><dt>Accuracy</dt><dd>Validation mAP50 0.31. Expect misses in cluttered piles.</dd></div>
+  </dl>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.wasm.min.js"></script>
+<script>
+(function(){
+  var NAMES=["plastic","metal","paper","organic","other"];
+  var VARS=["--c-plastic","--c-metal","--c-paper","--c-organic","--c-other"];
+  var HINT=["bottles, bags, wrappers","cans, foil, tins","cardboard, cartons, sheets","food scraps, peels","anything else"];
+  var S=640, MINCONF=0.10, MAXSIDE=1400;
+  var $=function(id){return document.getElementById(id)};
+  var cv=$("cv"), ctx=cv.getContext("2d"), stage=$("stage"), empty=$("empty"), statusEl=$("status"), readout=$("readout");
+  var conf=$("conf"), confOut=$("confOut"), camBtn=$("camBtn");
+  var session=null, dets=[], pinned=-1, hover=-1, busy=false, camOn=false, stream=null, video=null, lastMs=0, base=null;
+
+  function color(i){return getComputedStyle(document.documentElement).getPropertyValue(VARS[i]).trim()||"#e33"}
+  function setStatus(t,s){statusEl.textContent=t;statusEl.dataset.s=s}
+
+  // bins UI
+  var binsEl=$("bins"), rows=[];
+  NAMES.forEach(function(n,i){
+    var b=document.createElement("button"); b.type="button"; b.className="bin"; b.setAttribute("aria-pressed","false");
+    b.innerHTML='<span class="sw" style="background:var('+VARS[i]+')"></span><span class="nm">'+n+'</span><span class="ct">0</span><span class="bar"><b style="background:var('+VARS[i]+')"></b></span><span class="hint">'+HINT[i]+'</span>';
+    b.addEventListener("mouseenter",function(){hover=i;draw()});
+    b.addEventListener("mouseleave",function(){hover=-1;draw()});
+    b.addEventListener("focus",function(){hover=i;draw()});
+    b.addEventListener("blur",function(){hover=-1;draw()});
+    b.addEventListener("click",function(){pinned=(pinned===i?-1:i);rows.forEach(function(r,k){r.el.setAttribute("aria-pressed",String(k===pinned))});draw()});
+    binsEl.appendChild(b); rows.push({el:b,ct:b.querySelector(".ct"),bar:b.querySelector(".bar b")});
+  });
+
+  function visible(){var t=parseFloat(conf.value);return dets.filter(function(d){return d.s>=t})}
+  function updateTally(){
+    var v=visible(), c=[0,0,0,0,0]; v.forEach(function(d){if(d.c<5)c[d.c]++});
+    var mx=Math.max.apply(null,c.concat([1]));
+    $("total").textContent=v.length;
+    rows.forEach(function(r,i){r.ct.textContent=c[i]; r.bar.style.width=(c[i]/mx*100)+"%"});
+  }
+
+  function draw(){
+    if(!base)return;
+    ctx.drawImage(base,0,0,cv.width,cv.height);
+    var focus=pinned>=0?pinned:hover, lw=Math.max(2,cv.width/420), fs=Math.max(12,Math.round(cv.width/58));
+    ctx.lineWidth=lw; ctx.font="500 "+fs+"px 'DM Mono',monospace"; ctx.textBaseline="top";
+    visible().forEach(function(d){
+      var dim=focus>=0&&d.c!==focus; ctx.globalAlpha=dim?(pinned>=0?0:0.18):1; if(!ctx.globalAlpha&&dim)return;
+      var col=color(d.c), w=d.x2-d.x1, h=d.y2-d.y1;
+      ctx.strokeStyle=col; ctx.strokeRect(d.x1,d.y1,w,h);
+      if(w>fs*4){
+        var t=NAMES[d.c]+" "+Math.round(d.s*100), tw=ctx.measureText(t).width+10, th=fs+8, ty=d.y1-th<0?d.y1:d.y1-th;
+        ctx.fillStyle=col; ctx.fillRect(d.x1-lw/2,ty,tw,th); ctx.fillStyle="#fff"; ctx.fillText(t,d.x1+5,ty+4);
+      }
+    });
+    ctx.globalAlpha=1;
+  }
+
+  function show(w,h){
+    var s=Math.min(1,MAXSIDE/Math.max(w,h)); cv.width=Math.round(w*s); cv.height=Math.round(h*s);
+    cv.hidden=false; empty.hidden=true;
+  }
+
+  function nms(bs,t){
+    bs.sort(function(a,b){return b.s-a.s}); var keep=[];
+    for(var i=0;i<bs.length;i++){var ok=true;for(var k=0;k<keep.length;k++){if(keep[k].c===bs[i].c&&iou(keep[k],bs[i])>=t){ok=false;break}}if(ok)keep.push(bs[i])}
+    return keep;
+  }
+  function iou(a,b){var x1=Math.max(a.x1,b.x1),y1=Math.max(a.y1,b.y1),x2=Math.min(a.x2,b.x2),y2=Math.min(a.y2,b.y2);
+    var i=Math.max(0,x2-x1)*Math.max(0,y2-y1);return i/((a.x2-a.x1)*(a.y2-a.y1)+(b.x2-b.x1)*(b.y2-b.y1)-i+1e-9)}
+
+  async function infer(){
+    var w=cv.width,h=cv.height, r=Math.min(S/w,S/h), nw=Math.round(w*r), nh=Math.round(h*r), px=Math.floor((S-nw)/2), py=Math.floor((S-nh)/2);
+    var c=document.createElement("canvas"); c.width=S;c.height=S; var cc=c.getContext("2d");
+    cc.fillStyle="rgb(114,114,114)"; cc.fillRect(0,0,S,S); cc.drawImage(base,px,py,nw,nh);
+    var d=cc.getImageData(0,0,S,S).data, f=new Float32Array(3*S*S), n=S*S;
+    for(var i=0;i<n;i++){f[i]=d[i*4]/255;f[n+i]=d[i*4+1]/255;f[2*n+i]=d[i*4+2]/255}
+    var t0=performance.now();
+    var res=await session.run({[session.inputNames[0]]:new ort.Tensor("float32",f,[1,3,S,S])});
+    var o=res[session.outputNames[0]], dm=o.dims, a=o.data, out=[];
+    if(dm[2]===6){ for(var q=0;q<dm[1];q++){var b=q*6; if(a[b+4]>=MINCONF)out.push({x1:a[b],y1:a[b+1],x2:a[b+2],y2:a[b+3],s:a[b+4],c:Math.round(a[b+5])})} }
+    else{
+      var nc=dm[1]-4, N=dm[2];
+      for(var j=0;j<N;j++){var best=0,bc=0;for(var k=0;k<nc;k++){var v=a[(4+k)*N+j];if(v>best){best=v;bc=k}}
+        if(best>=MINCONF){var cx=a[j],cy=a[N+j],bw=a[2*N+j],bh=a[3*N+j];out.push({x1:cx-bw/2,y1:cy-bh/2,x2:cx+bw/2,y2:cy+bh/2,s:best,c:bc})}}
+      out=nms(out,0.45);
+    }
+    dets=out.map(function(d){return{c:d.c,s:d.s,x1:Math.max(0,(d.x1-px)/r),y1:Math.max(0,(d.y1-py)/r),x2:Math.min(w,(d.x2-px)/r),y2:Math.min(h,(d.y2-py)/r)}});
+    lastMs=performance.now()-t0;
+  }
+
+  async function run(){
+    if(!session){readout.textContent="The model is still loading.";return}
+    if(busy)return; busy=true;
+    try{ await infer(); draw(); updateTally(); readout.textContent=visible().length+" items in "+Math.round(lastMs)+" ms"; }
+    catch(e){readout.textContent="Detection failed: "+e.message}
+    busy=false;
+  }
+
+  function useImage(img){
+    stopCam(); base=img; show(img.naturalWidth||img.width,img.naturalHeight||img.height);
+    ctx.drawImage(base,0,0,cv.width,cv.height); run();
+  }
+  function loadFile(f){
+    if(!f||!/^image\//.test(f.type))return; var img=new Image();
+    img.onload=function(){useImage(img)}; img.onerror=function(){readout.textContent="That file could not be read as an image."}; img.src=URL.createObjectURL(f);
+  }
+  $("photo").addEventListener("change",function(e){loadFile(e.target.files[0]);e.target.value=""});
+  ["dragenter","dragover"].forEach(function(ev){stage.addEventListener(ev,function(e){e.preventDefault();stage.classList.add("drag")})});
+  ["dragleave","drop"].forEach(function(ev){stage.addEventListener(ev,function(e){e.preventDefault();stage.classList.remove("drag")})});
+  stage.addEventListener("drop",function(e){loadFile(e.dataTransfer.files[0])});
+  document.addEventListener("paste",function(e){var it=[].slice.call(e.clipboardData.items).filter(function(i){return /^image\//.test(i.type)})[0];if(it)loadFile(it.getAsFile())});
+  conf.addEventListener("input",function(){confOut.textContent=parseFloat(conf.value).toFixed(2);draw();updateTally();if(base&&!camOn)readout.textContent=visible().length+" items in "+Math.round(lastMs)+" ms"});
+
+  // camera
+  function stopCam(){camOn=false;camBtn.textContent="Use camera";if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null}}
+  camBtn.addEventListener("click",async function(){
+    if(camOn){stopCam();return}
+    if(!session){readout.textContent="The model is still loading.";return}
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+      video=document.createElement("video"); video.srcObject=stream; video.playsInline=true; video.muted=true; await video.play();
+      base=video; camOn=true; camBtn.textContent="Stop camera"; show(video.videoWidth,video.videoHeight); loop();
+    }catch(e){readout.textContent="Camera unavailable here. Allow camera access, and open the site over https."; stopCam()}
+  });
+  async function loop(){
+    if(!camOn)return; ctx.drawImage(video,0,0,cv.width,cv.height);
+    await run(); if(camOn)requestAnimationFrame(loop);
+  }
+
+  // model
+  async function boot(){
+    try{
+      ort.env.wasm.numThreads=1;
+      ort.env.wasm.wasmPaths={mjs:"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort-wasm-simd-threaded.mjs",wasm:new URL("ort-wasm-simd-threaded.wasm",document.baseURI).href};
+      var resp=await fetch("best.onnx"); var buf; if(resp.ok){buf=await resp.arrayBuffer()}else{var r2=await fetch("best.b64.txt"); if(!r2.ok)throw new Error("model file not found"); var bin=atob(await r2.text()), u=new Uint8Array(bin.length); for(var z=0;z<bin.length;z++)u[z]=bin.charCodeAt(z); buf=u.buffer}
+      session=await ort.InferenceSession.create(buf,{executionProviders:["wasm"],graphOptimizationLevel:"all"});
+      setStatus("Model ready","ready");
+    }catch(e){setStatus("Model failed to load","err");readout.textContent=String(e.message||e)}
+  }
+  boot();
+  window.__pile={get ready(){return !!session},load:loadFile,get dets(){return dets}};
+})();
+</script>
+</body></html>
