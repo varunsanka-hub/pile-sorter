@@ -75,7 +75,7 @@ You will need:
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/varunsanka/pile-sorter.git
+   git clone https://github.com/varunsanka-hub/pile-sorter.git
    ```
 
 2. Enter the project directory:
